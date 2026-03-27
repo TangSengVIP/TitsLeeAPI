@@ -806,6 +806,34 @@
           />
           <p class="input-hint">{{ t('admin.accounts.upstream.apiKeyHint') }}</p>
         </div>
+
+        <!-- Fetch Models button (only when upstream base_url + api_key are filled) -->
+        <div>
+          <button
+            type="button"
+            :disabled="!upstreamBaseUrl.trim() || !upstreamApiKey.trim() || fetchingUpstreamModels"
+            @click="fetchUpstreamModelsFromBase"
+            :class="[
+              'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+              upstreamBaseUrl.trim() && upstreamApiKey.trim()
+                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-900/50'
+                : 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-dark-700 dark:text-dark-400'
+            ]"
+          >
+            <svg v-if="fetchingUpstreamModels" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {{ fetchingUpstreamModels ? t('admin.accounts.fetchingUpstreamModels') : t('admin.accounts.fetchUpstreamModels') }}
+          </button>
+          <p v-if="upstreamModelsFetchError" class="mt-1 text-xs text-red-500">{{ upstreamModelsFetchError }}</p>
+          <p v-if="upstreamModelsResult && upstreamModelsResult.count > 0" class="mt-1 text-xs text-green-600 dark:text-green-400">
+            {{ t('admin.accounts.upstreamModelsFound', { count: upstreamModelsResult.count }) }}
+          </p>
+        </div>
       </div>
 
       <!-- Antigravity model restriction (applies to OAuth + Upstream) -->
@@ -3025,6 +3053,9 @@ const antigravityAccountType = ref<'oauth' | 'upstream'>('oauth') // For antigra
 const soraAccountType = ref<'oauth' | 'apikey'>('oauth') // For sora: oauth or apikey (upstream)
 const upstreamBaseUrl = ref('') // For upstream type: base URL
 const upstreamApiKey = ref('') // For upstream type: API key
+const fetchingUpstreamModels = ref(false)
+const upstreamModelsResult = ref<{ source: string; models: string[]; count: number } | null>(null)
+const upstreamModelsFetchError = ref('')
 const antigravityModelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const antigravityWhitelistModels = ref<string[]>([])
 const antigravityModelMappings = ref<ModelMapping[]>([])
@@ -3450,6 +3481,61 @@ const addAntigravityPresetMapping = (from: string, to: string) => {
   antigravityModelMappings.value.push({ from, to })
 }
 
+const fetchUpstreamModelsFromBase = async () => {
+  if (!upstreamBaseUrl.value.trim() || !upstreamApiKey.value.trim()) {
+    return
+  }
+  fetchingUpstreamModels.value = true
+  upstreamModelsFetchError.value = ''
+  upstreamModelsResult.value = null
+  try {
+    // We need to create a temporary account to call the backend endpoint.
+    // The backend will read base_url and api_key from the account's credentials.
+    // Since we don't have an account ID yet (creating new), we use the preview/pre-test approach.
+    // Instead, call the upstream directly from frontend using the entered base_url + api_key.
+    const baseUrl = upstreamBaseUrl.value.trim()
+    const apiKey = upstreamApiKey.value.trim()
+    const modelsUrl = baseUrl.replace(/\/$/, '') + '/v1/models'
+    const resp = await fetch(modelsUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'x-api-key': apiKey,
+        Accept: 'application/json'
+      }
+    })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`${resp.status}: ${body}`)
+    }
+    const body = await resp.json()
+    let models: string[] = []
+    // Claude-style response
+    if (body.data && Array.isArray(body.data)) {
+      models = body.data.map((m: any) => m.id)
+    }
+    // Generic OpenAI-style response
+    if (models.length === 0 && body.data && Array.isArray(body.data)) {
+      models = body.data.map((m: any) => m.id)
+    }
+    if (models.length === 0) {
+      throw new Error(t('admin.accounts.upstreamModelsParseFailed'))
+    }
+    upstreamModelsResult.value = { source: 'upstream', models, count: models.length }
+    // Auto-fill mappings: each upstream model maps to itself
+    for (const model of models) {
+      if (!antigravityModelMappings.value.some((m) => m.from === model)) {
+        antigravityModelMappings.value.push({ from: model, to: model })
+      }
+    }
+    appStore.showInfo(t('admin.accounts.upstreamModelsAutoFilled', { count: models.length }))
+  } catch (err: any) {
+    upstreamModelsFetchError.value = err.message || t('admin.accounts.fetchUpstreamModelsFailed')
+  } finally {
+    fetchingUpstreamModels.value = false
+  }
+}
+
 // Error code toggle helper
 const toggleErrorCode = (code: number) => {
   const index = selectedErrorCodes.value.indexOf(code)
@@ -3765,6 +3851,10 @@ const resetForm = () => {
   soraOAuth.resetState()
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
+  upstreamBaseUrl.value = ''
+  upstreamApiKey.value = ''
+  upstreamModelsResult.value = null
+  upstreamModelsFetchError.value = ''
   oauthFlowRef.value?.reset()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()

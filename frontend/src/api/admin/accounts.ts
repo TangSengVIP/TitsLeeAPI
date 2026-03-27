@@ -637,6 +637,22 @@ export async function setPrivacy(id: number): Promise<Account> {
   return data
 }
 
+export interface FetchUpstreamModelsResult {
+  source: string
+  models: string[]
+  count: number
+}
+
+/**
+ * Fetch available models from an Antigravity upstream account (base_url + api_key)
+ * @param id - Account ID
+ * @returns List of available models from upstream
+ */
+export async function fetchUpstreamModels(id: number): Promise<FetchUpstreamModelsResult> {
+  const { data } = await apiClient.post<FetchUpstreamModelsResult>(`/admin/accounts/${id}/fetch-upstream-models`)
+  return data
+}
+
 export const accountsAPI = {
   list,
   listWithEtag,
@@ -674,7 +690,8 @@ export const accountsAPI = {
   getAntigravityDefaultModelMapping,
   batchClearError,
   batchRefresh,
-  setPrivacy
+  setPrivacy,
+  fetchUpstreamModels
 }
 
 export default accountsAPI

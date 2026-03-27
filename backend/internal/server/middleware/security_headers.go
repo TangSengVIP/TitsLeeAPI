@@ -43,7 +43,7 @@ func GetNonceFromContext(c *gin.Context) string {
 // SecurityHeaders sets baseline security headers for all responses.
 // getFrameSrcOrigins is an optional function that returns extra origins to inject into frame-src;
 // pass nil to disable dynamic frame-src injection.
-func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) gin.HandlerFunc {
+func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string, hstsMaxAge int64) gin.HandlerFunc {
 	policy := strings.TrimSpace(cfg.Policy)
 	if policy == "" {
 		policy = config.DefaultCSPPolicy
@@ -62,14 +62,59 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) g
 			}
 		}
 
+		// ── Core Security Headers ──────────────────────────────────
+		// Prevent MIME type sniffing
 		c.Header("X-Content-Type-Options", "nosniff")
+		// Prevent clickjacking (API routes skip frame-ancestors — already enforced by CSP)
 		c.Header("X-Frame-Options", "DENY")
+		// Referrer policy for cross-origin requests
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		if isAPIRoutePath(c) {
+		// Control information in browser address bar
+		c.Header("X-Permitted-Cross-Domain-Policies", "none")
+
+		// ── Transport Security (HSTS) ─────────────────────────────
+		// Only send HSTS on HTTPS requests; skip upgrade-insecure-requests
+		// so that the server doesn't redirect API clients (they expect raw responses).
+		scheme := c.GetHeader("X-Forwarded-Proto")
+		if scheme == "" {
+			// Infer from the request TLS state
+			if c.Request.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
+		}
+		if scheme == "https" && hstsMaxAge > 0 {
+			// includeSubDomains and preload are not set by default to avoid accidental
+			// subdomain breakage; operators can extend the header via config if needed.
+			c.Header("Strict-Transport-Security",
+				fmt.Sprintf("max-age=%d; includeSubDomains", hstsMaxAge))
+		}
+
+		// ── Browser Feature / Permissions Policy ─────────────────
+		// Restrict powerful browser APIs to same-origin only.
+		// Omit deprecated/removed tokens (e.g. document-domain, speaker) that Chrome warns on.
+		c.Header("Permissions-Policy",
+			"accelerometer=(), camera=(), geolocation=(), gyroscope=(), "+
+				"magnetometer=(), microphone=(), payment=(self), sync-xhr=(), usb=()")
+
+		apiPath := isAPIRoutePath(c)
+
+		// ── Cross-Origin Isolation (COEP/COOP) ───────────────────
+		// Apply only to HTML/SPA responses. JSON API responses under /api/v1 should not
+		// carry COEP/COOP (unnecessary and can confuse clients / tooling).
+		if !apiPath {
+			c.Header("Cross-Origin-Embedder-Policy", "require-corp")
+			c.Header("Cross-Origin-Opener-Policy", "same-origin")
+		}
+
+		// ── API Routes: skip CSP/nonce processing ─────────────────
+		if apiPath {
 			c.Next()
 			return
 		}
 
+		// ── CSP for frontend routes ───────────────────────────────
 		if cfg.Enabled {
 			// Generate nonce for this request
 			nonce, err := GenerateNonce()
@@ -91,7 +136,8 @@ func isAPIRoutePath(c *gin.Context) bool {
 		return false
 	}
 	path := c.Request.URL.Path
-	return strings.HasPrefix(path, "/v1/") ||
+	return strings.HasPrefix(path, "/api/v1/") ||
+		strings.HasPrefix(path, "/v1/") ||
 		strings.HasPrefix(path, "/v1beta/") ||
 		strings.HasPrefix(path, "/antigravity/") ||
 		strings.HasPrefix(path, "/sora/") ||

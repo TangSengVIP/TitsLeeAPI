@@ -1,5 +1,5 @@
 <template>
-  <div class="relative" ref="containerRef">
+  <div class="relative overflow-visible" ref="containerRef">
     <button
       type="button"
       @click="toggle"
@@ -350,12 +350,12 @@ onUnmounted(() => {
 }
 
 .date-picker-dropdown {
-  @apply absolute left-0 z-[100] mt-2;
+  @apply absolute left-0 z-[9999] mt-2;
   @apply bg-white dark:bg-dark-800;
   @apply rounded-xl;
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
-  @apply overflow-hidden;
+  @apply overflow-visible;
   @apply min-w-[320px];
 }
 

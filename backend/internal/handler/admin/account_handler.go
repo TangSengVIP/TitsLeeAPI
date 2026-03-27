@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -2097,6 +2099,123 @@ func (h *AccountHandler) BatchRefreshTier(c *gin.Context) {
 // GET /api/v1/admin/accounts/antigravity/default-model-mapping
 func (h *AccountHandler) GetAntigravityDefaultModelMapping(c *gin.Context) {
 	response.Success(c, domain.DefaultAntigravityModelMapping)
+}
+
+// FetchUpstreamModels handles fetching available models from an Antigravity upstream account.
+// POST /api/v1/admin/accounts/:id/fetch-upstream-models
+func (h *AccountHandler) FetchUpstreamModels(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.NotFound(c, "Account not found")
+		return
+	}
+
+	// 只支持 Antigravity upstream 类型（base_url + api_key）
+	if account.Platform != service.PlatformAntigravity || account.Type != service.AccountTypeUpstream {
+		response.BadRequest(c, "Only Antigravity upstream accounts support fetching upstream models")
+		return
+	}
+
+	baseURL := strings.TrimSpace(account.GetCredential("base_url"))
+	apiKey := strings.TrimSpace(account.GetCredential("api_key"))
+	if baseURL == "" || apiKey == "" {
+		response.BadRequest(c, "Upstream account is missing base_url or api_key")
+		return
+	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
+
+	modelsURL := baseURL + "/v1/models"
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, modelsURL, nil)
+	if err != nil {
+		response.InternalError(c, "Failed to create request: "+err.Error())
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	// 使用代理
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	var resp *http.Response
+	if proxyURL != "" {
+		proxy, parseErr := url.Parse(proxyURL)
+		if parseErr == nil {
+			client.Transport = &http.Transport{Proxy: http.ProxyURL(proxy)}
+		}
+	}
+
+	resp, err = client.Do(req)
+	if err != nil {
+		response.InternalError(c, "Failed to connect to upstream: "+err.Error())
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		response.InternalError(c, fmt.Sprintf("Upstream returned %d: %s", resp.StatusCode, string(body)))
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20)) // 2MB limit
+	if err != nil {
+		response.InternalError(c, "Failed to read response: "+err.Error())
+		return
+	}
+
+	// 尝试解析 Claude 格式的 models 列表
+	var claudeResp struct {
+		Data []struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+			Type        string `json:"type"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &claudeResp); err == nil && len(claudeResp.Data) > 0 {
+		models := make([]string, 0, len(claudeResp.Data))
+		for _, m := range claudeResp.Data {
+			models = append(models, m.ID)
+		}
+		response.Success(c, gin.H{
+			"source": "upstream",
+			"models": models,
+			"count":  len(models),
+		})
+		return
+	}
+
+	// 尝试解析通用格式
+	var genericResp struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &genericResp); err == nil && len(genericResp.Data) > 0 {
+		models := make([]string, 0, len(genericResp.Data))
+		for _, m := range genericResp.Data {
+			models = append(models, m.ID)
+		}
+		response.Success(c, gin.H{
+			"source": "upstream",
+			"models": models,
+			"count":  len(models),
+		})
+		return
+	}
+
+	response.InternalError(c, "Failed to parse models list from upstream response")
 }
 
 // sanitizeExtraBaseRPM 对 extra map 中的 base_rpm 值进行范围校验和归一化。

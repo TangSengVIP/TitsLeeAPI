@@ -2405,6 +2405,12 @@ export default {
         pleaseEnterBaseUrl: 'Please enter upstream Base URL',
         pleaseEnterApiKey: 'Please enter upstream API Key'
       },
+      fetchUpstreamModels: 'Fetch Upstream Models',
+      fetchingUpstreamModels: 'Fetching...',
+      fetchUpstreamModelsFailed: 'Failed to fetch upstream models',
+      upstreamModelsFound: '{count} models found',
+      upstreamModelsAutoFilled: '{count} model mappings auto-filled',
+      upstreamModelsParseFailed: 'Failed to parse models list from upstream response',
       // OAuth flow
       oauth: {
         title: 'Claude Account Authorization',

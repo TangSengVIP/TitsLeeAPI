@@ -100,7 +100,10 @@ func runSetupServer() {
 	r := gin.New()
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS(config.CORSConfig{}))
-	r.Use(middleware.SecurityHeaders(config.CSPConfig{Enabled: true, Policy: config.DefaultCSPPolicy}, nil))
+	// Request validation (injection/DoS protection)
+	r.Use(middleware.RequestValidator())
+	// Global IP-based rate limiter requires Redis — not available in setup server
+	r.Use(middleware.SecurityHeaders(config.CSPConfig{Enabled: true, Policy: config.DefaultCSPPolicy}, nil, 31536000))
 
 	// Register setup routes
 	setup.RegisterRoutes(r)

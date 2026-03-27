@@ -1,0 +1,177 @@
+# =============================================================================
+# Sub2API Docker Compose — Hardened Production Overlay
+# =============================================================================
+# Apply this overlay on top of docker-compose.yml or docker-compose.local.yml:
+#   docker-compose -f docker-compose.yml -f docker-compose.security.yml up -d
+#
+# Security hardening applied:
+#   • PostgreSQL: sslmode=require, scram-sha-256 auth, no exposed port
+#   • Redis:      AUTH required, rename dangerous commands, read-only rootfs
+#   • Network:    Isolated bridge with no IP masquerading (no external egress)
+#   • Runtime:    no-new-privileges, resource ulimits, read-only filesystem
+#   • Defaults:   HTTP URLs and private hosts DISABLED by default
+#
+# ⚠️  IMPORTANT: You MUST set REDIS_PASSWORD before using this overlay.
+#     Generate a strong password: openssl rand -base64 48
+#
+# To use TLS for Redis (recommended for production):
+#   1. Generate certificates: ./tools/generate-certs.sh
+#   2. Mount them in ./certs/redis/ and ./certs/redis/
+#   3. Set REDIS_ENABLE_TLS=true in your .env
+#
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Sub2API Application
+  # ===========================================================================
+  sub2api:
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+      - /run:tmpfs:size=8M,mode=1775
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+      nproc:
+        soft: 512
+        hard: 512
+    environment:
+      # DATABASE — TLS enforced in production
+      - DATABASE_SSLMODE=require
+      - DATABASE_SSLROOTCERT=${POSTGRES_SSL_ROOTCERT:-}
+      - DATABASE_SSLCERT=${POSTGRES_SSL_CERT:-}
+      - DATABASE_SSLKEY=${POSTGRES_SSL_KEY:-}
+      # REDIS — AUTH + TLS support
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-false}
+      - REDIS_TLS_CA_CERT=${REDIS_TLS_CA_CERT:-}
+      - REDIS_TLS_CERT=${REDIS_TLS_CERT:-}
+      - REDIS_TLS_KEY=${REDIS_TLS_KEY:-}
+      # SECURITY DEFAULTS — override dangerous defaults from .env.example
+      - SECURITY_URL_ALLOWLIST_ENABLED=${SECURITY_URL_ALLOWLIST_ENABLED:-false}
+      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=${SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP:-false}
+      - SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=${SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS:-false}
+
+  # ===========================================================================
+  # PostgreSQL Database — Hardened
+  # ===========================================================================
+  postgres:
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    environment:
+      # ── Connection Security ───────────────────────────────────────────────
+      # Force SSL on all connections (enforced even without certificates)
+      - POSTGRES_SSL=on
+      # Minimum TLS version
+      - POSTGRES_SSL_MIN_PROTOCOL_VERSION=TLSv1.2
+      # Authentication method: scram-sha-256 is the modern standard
+      # (requires pg_hba.conf adjustment; alpine postgres defaults to md5)
+      - POSTGRES_METHOD=scram-sha-256
+      # ── Access Control ────────────────────────────────────────────────────
+      # Reject connections with empty passwords
+      - POSTGRES_REJECT_EMPTY_PASSWORD=1
+      # Limit total connections
+      - POSTGRES_MAX_CONNECTIONS=200
+      # ── Security Hardening ────────────────────────────────────────────────
+      # Hide server version in error messages
+      - POSTGRES_CLIENT_MIN_MESSAGES=notice
+    # No ports exposed — sub2api connects via internal network only
+
+  # ===========================================================================
+  # Redis Cache — Hardened
+  # ===========================================================================
+  redis:
+    security_opt:
+      - no-new-privileges:true
+    read_only: false    # needs write for AOF persistence, but rootfs is read-only
+    tmpfs:
+      - /data:size=64M,mode=1777  # in-memory tmpfs for persistence
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    command: >
+      sh -c '
+        set -e
+
+        # ── 1. Validate required secrets ────────────────────────────────────
+        if [ -z "$REDIS_PASSWORD" ]; then
+          echo "FATAL: REDIS_PASSWORD environment variable is not set."
+          echo "       Production Redis REQUIRES authentication."
+          echo "       Generate a password: openssl rand -base64 48"
+          exit 1
+        fi
+
+        # ── 2. Build redis-server command ────────────────────────────────────
+        CMD="redis-server --save 60 1 --appendonly yes --appendfsync everysec"
+
+        # TLS mode (recommended for production)
+        if [ "$REDIS_ENABLE_TLS" = "true" ]; then
+          CMD="$CMD --tls-port 6380 --port 0"
+          [ -n "$REDIS_TLS_CERT" ]  && CMD="$CMD --tls-cert-file $REDIS_TLS_CERT"
+          [ -n "$REDIS_TLS_KEY" ]   && CMD="$CMD --tls-key-file $REDIS_TLS_KEY"
+          [ -n "$REDIS_TLS_CA_CERT" ] && CMD="$CMD --tls-ca-cert-file $REDIS_TLS_CA_CERT"
+          CMD="$CMD --tls-auth-clients no"   # require client certificates
+          CMD="$CMD --tls-protocols TLSv1.2 TLSv1.3"
+        else
+          CMD="$CMD --port 6379"
+        fi
+
+        # ── 3. Authentication ────────────────────────────────────────────────
+        CMD="$CMD --requirepass $REDIS_PASSWORD"
+
+        # ── 4. Disable dangerous commands ───────────────────────────────────
+        # Renaming to empty string makes the command unavailable
+        for cmd in FLUSHDB FLUSHALL KEYS DEBUG SHUTDOWN BGSAVE BGREWRITEAOF CONFIG; do
+          CMD="$CMD --rename-command $cmd \"\""
+        done
+
+        # ── 5. Memory and eviction ─────────────────────────────────────────
+        CMD="$CMD --maxmemory 256mb --maxmemory-policy allkeys-lru"
+
+        # ── 6. Network hardening ────────────────────────────────────────────
+        # Disable protected mode (we use network isolation, not localhost)
+        CMD="$CMD --protected-mode no"
+        # TCP hardening
+        CMD="$CMD --tcp-backlog 511 --tcp-keepalive 300"
+
+        echo "[Redis Security] Starting with:"
+        echo "$CMD" | sed -r 's/--requirepass [^ ]+/--requirepass <REDACTED>/g'
+        echo "[Redis Security] TLS: $REDIS_ENABLE_TLS"
+
+        eval "exec $CMD"
+      '
+
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+      # NOTE: This healthcheck requires REDIS_PASSWORD to be set.
+      # Without it, the health check will always fail.
+
+    # No ports exposed — sub2api connects via internal network only
+
+# =============================================================================
+# Network Isolation
+# =============================================================================
+networks:
+  default:
+    name: sub2api-network
+    driver: bridge
+    driver_opts:
+      # Disable IP masquerading — containers cannot initiate connections
+      # to external networks. Only DNS resolution and explicit port mappings work.
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

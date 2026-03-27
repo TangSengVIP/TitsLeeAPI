@@ -8,6 +8,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	"github.com/Wei-Shaw/sub2api/internal/middleware"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/routes"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -54,12 +55,16 @@ func SetupRouter(
 	r.Use(middleware2.RequestLogger())
 	r.Use(middleware2.Logger())
 	r.Use(middleware2.CORS(cfg.CORS))
+	// Global IP-based rate limiter: 200 req/min per IP, fail-open (defense-in-depth)
+	r.Use(middleware.BuildGlobalLimitMw(redisClient))
+	// Validate all incoming requests before business logic runs
+	r.Use(middleware2.RequestValidator())
 	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, func() []string {
 		if p := cachedFrameOrigins.Load(); p != nil {
 			return *p
 		}
 		return nil
-	}))
+	}, cfg.Security.ResponseHeaders.HSTSMaxAgeSeconds))
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {
@@ -111,5 +116,5 @@ func registerRoutes(
 	routes.RegisterUserRoutes(v1, h, jwtAuth, settingService)
 	routes.RegisterSoraClientRoutes(v1, h, jwtAuth, settingService)
 	routes.RegisterAdminRoutes(v1, h, adminAuth)
-	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, cfg)
+	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, redisClient)
 }

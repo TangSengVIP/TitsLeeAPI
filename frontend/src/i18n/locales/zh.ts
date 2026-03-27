@@ -2549,6 +2549,12 @@ export default {
         pleaseEnterBaseUrl: '请输入上游 Base URL',
         pleaseEnterApiKey: '请输入上游 API Key'
       },
+      fetchUpstreamModels: '获取上游模型',
+      fetchingUpstreamModels: '获取中...',
+      fetchUpstreamModelsFailed: '获取上游模型失败',
+      upstreamModelsFound: '已获取 {count} 个模型',
+      upstreamModelsAutoFilled: '已自动填入 {count} 个模型映射',
+      upstreamModelsParseFailed: '无法解析上游返回的模型列表',
       // OAuth flow
       oauth: {
         title: 'Claude 账号授权',

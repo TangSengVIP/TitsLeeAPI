@@ -2,13 +2,16 @@ package routes
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	ratelimitermiddleware "github.com/Wei-Shaw/sub2api/internal/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // RegisterGatewayRoutes 注册 API 网关路由（Claude/OpenAI/Gemini 兼容）
@@ -21,6 +24,7 @@ func RegisterGatewayRoutes(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	cfg *config.Config,
+	redisClient *redis.Client,
 ) {
 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize)
 	soraMaxBodySize := cfg.Gateway.SoraMaxBodySize
@@ -32,6 +36,11 @@ func RegisterGatewayRoutes(
 	opsErrorLogger := handler.OpsErrorLoggerMiddleware(opsService)
 	endpointNorm := handler.InboundEndpointMiddleware()
 
+	// Gateway-level rate limiter (Redis-backed, dual-axis: per-key/IP + per-endpoint)
+	// Applied to all /v1/*, /v1beta/*, /antigravity/* routes.
+	gwRateLimiter := ratelimitermiddleware.NewAPIGatewayRateLimiter(redisClient)
+	gwRateLimitMw := buildGatewayLimitMw(gwRateLimiter)
+
 	// 未分组 Key 拦截中间件（按协议格式区分错误响应）
 	requireGroupAnthropic := middleware.RequireGroupAssignment(settingService, middleware.AnthropicErrorWriter)
 	requireGroupGoogle := middleware.RequireGroupAssignment(settingService, middleware.GoogleErrorWriter)
@@ -42,6 +51,7 @@ func RegisterGatewayRoutes(
 	gateway.Use(clientRequestID)
 	gateway.Use(opsErrorLogger)
 	gateway.Use(endpointNorm)
+	gateway.Use(gwRateLimitMw)
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
 	gateway.Use(requireGroupAnthropic)
 	{
@@ -118,11 +128,11 @@ func RegisterGatewayRoutes(
 		}
 		h.Gateway.Responses(c)
 	}
-	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
-	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
-	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
+	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gwRateLimitMw, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
+	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gwRateLimitMw, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
+	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gwRateLimitMw, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
 	// OpenAI Chat Completions API（不带v1前缀的别名）— auto-route based on group platform
-	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gwRateLimitMw, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
 		if getGroupPlatform(c) == service.PlatformOpenAI {
 			h.OpenAIGateway.ChatCompletions(c)
 			return
@@ -131,7 +141,7 @@ func RegisterGatewayRoutes(
 	})
 
 	// Antigravity 模型列表
-	r.GET("/antigravity/models", gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.AntigravityModels)
+	r.GET("/antigravity/models", gwRateLimitMw, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.AntigravityModels)
 
 	// Antigravity 专用路由（仅使用 antigravity 账户，不混合调度）
 	antigravityV1 := r.Group("/antigravity/v1")
@@ -185,6 +195,27 @@ func RegisterGatewayRoutes(
 	}
 	// Sora 媒体代理（签名 URL，无需 API Key）
 	r.GET("/sora/media-signed/*filepath", h.SoraGateway.MediaProxySigned)
+
+	// Gemini routes — also protected by gateway rate limiter
+	gemini.Use(gwRateLimitMw)
+
+	// Antigravity routes — also protected by gateway rate limiter
+	antigravityV1.Use(gwRateLimitMw)
+	antigravityV1Beta.Use(gwRateLimitMw)
+}
+
+// buildGatewayLimitMw creates a Gin middleware that enforces dual-axis rate limits
+// on the gateway. The limits are configurable via environment variables.
+func buildGatewayLimitMw(lr *ratelimitermiddleware.APIGatewayRateLimiter) gin.HandlerFunc {
+	cfg := ratelimitermiddleware.GatewayRateLimitConfig{
+		// Per-key limit: 1000 req/min per API key or IP (fail-open for availability)
+		PerKeyLimit: 1000,
+		Window:      time.Minute,
+		FailureMode: ratelimitermiddleware.RateLimitFailOpen,
+		// Per-endpoint limit: 2000 req/min globally per endpoint (burst protection)
+		PerEndpointLimit: 2000,
+	}
+	return lr.Limit(cfg)
 }
 
 // getGroupPlatform extracts the group platform from the API Key stored in context.

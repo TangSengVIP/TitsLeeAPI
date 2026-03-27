@@ -265,6 +265,11 @@ type ResponseHeaderConfig struct {
 	Enabled           bool     `mapstructure:"enabled"`
 	AdditionalAllowed []string `mapstructure:"additional_allowed"`
 	ForceRemove       []string `mapstructure:"force_remove"`
+	// HSTSMaxAgeSeconds: Strict-Transport-Security max-age value (in seconds).
+	// Set to 0 to disable the HSTS header entirely (useful when TLS termination
+	// is handled upstream and the operator prefers to configure HSTS there).
+	// Recommended production value: 31536000 (1 year) or 63072000 (2 years).
+	HSTSMaxAgeSeconds int64 `mapstructure:"hsts_max_age_seconds"`
 }
 
 type CSPConfig struct {
@@ -734,20 +739,32 @@ type DatabaseConfig struct {
 	ConnMaxLifetimeMinutes int `mapstructure:"conn_max_lifetime_minutes"`
 	// ConnMaxIdleTimeMinutes: 空闲连接最大存活时间，及时释放不活跃连接
 	ConnMaxIdleTimeMinutes int `mapstructure:"conn_max_idle_time_minutes"`
+	// SSL certificate paths for certificate verification
+	SSLRootCert string `mapstructure:"ssl_root_cert"`
+	SSLCert     string `mapstructure:"ssl_cert"`
+	SSLKey      string `mapstructure:"ssl_key"`
 }
 
 func (d *DatabaseConfig) DSN() string {
-	// 当密码为空时不包含 password 参数，避免 libpq 解析错误
-	if d.Password == "" {
-		return fmt.Sprintf(
-			"host=%s port=%d user=%s dbname=%s sslmode=%s",
-			d.Host, d.Port, d.User, d.DBName, d.SSLMode,
-		)
-	}
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode,
+	// When password is empty, don't include it to avoid libpq parsing errors
+	base := fmt.Sprintf(
+		"host=%s port=%d user=%s dbname=%s sslmode=%s",
+		d.Host, d.Port, d.User, d.DBName, d.SSLMode,
 	)
+	if d.Password != "" {
+		base += fmt.Sprintf(" password=%s", d.Password)
+	}
+	// Append SSL certificate paths if configured
+	if d.SSLRootCert != "" {
+		base += fmt.Sprintf(" sslrootcert=%s", d.SSLRootCert)
+	}
+	if d.SSLCert != "" {
+		base += fmt.Sprintf(" sslcert=%s", d.SSLCert)
+	}
+	if d.SSLKey != "" {
+		base += fmt.Sprintf(" sslkey=%s", d.SSLKey)
+	}
+	return base
 }
 
 // DSNWithTimezone returns DSN with timezone setting
@@ -755,17 +772,24 @@ func (d *DatabaseConfig) DSNWithTimezone(tz string) string {
 	if tz == "" {
 		tz = "Asia/Shanghai"
 	}
-	// 当密码为空时不包含 password 参数，避免 libpq 解析错误
-	if d.Password == "" {
-		return fmt.Sprintf(
-			"host=%s port=%d user=%s dbname=%s sslmode=%s TimeZone=%s",
-			d.Host, d.Port, d.User, d.DBName, d.SSLMode, tz,
-		)
-	}
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=%s",
-		d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode, tz,
+	base := fmt.Sprintf(
+		"host=%s port=%d user=%s dbname=%s sslmode=%s TimeZone=%s",
+		d.Host, d.Port, d.User, d.DBName, d.SSLMode, tz,
 	)
+	if d.Password != "" {
+		base += fmt.Sprintf(" password=%s", d.Password)
+	}
+	// Append SSL certificate paths if configured
+	if d.SSLRootCert != "" {
+		base += fmt.Sprintf(" sslrootcert=%s", d.SSLRootCert)
+	}
+	if d.SSLCert != "" {
+		base += fmt.Sprintf(" sslcert=%s", d.SSLCert)
+	}
+	if d.SSLKey != "" {
+		base += fmt.Sprintf(" sslkey=%s", d.SSLKey)
+	}
+	return base
 }
 
 // RedisConfig Redis 连接配置
@@ -1170,6 +1194,8 @@ func setDefaults() {
 	viper.SetDefault("security.response_headers.enabled", true)
 	viper.SetDefault("security.response_headers.additional_allowed", []string{})
 	viper.SetDefault("security.response_headers.force_remove", []string{})
+	// HSTS: default 1 year, operator can increase to 2 years or disable (0).
+	viper.SetDefault("security.response_headers.hsts_max_age_seconds", 31536000)
 	viper.SetDefault("security.csp.enabled", true)
 	viper.SetDefault("security.csp.policy", DefaultCSPPolicy)
 	viper.SetDefault("security.proxy_probe.insecure_skip_verify", false)
