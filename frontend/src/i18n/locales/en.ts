@@ -14,7 +14,7 @@ export default {
     heroSubtitle: 'One Key, All AI Models',
     heroDescription: 'No need to manage multiple subscriptions. Access Claude, GPT, Gemini and more with a single API key',
     tags: {
-      subscriptionToApi: 'Subscription to API',
+      subscriptionToApi: 'Lossless passthrough',
       stickySession: 'Session Persistence',
       realtimeBilling: 'Pay As You Go'
     },
@@ -43,7 +43,12 @@ export default {
     // Solutions section
     solutions: {
       title: 'We Solve These Problems',
-      subtitle: 'Three simple steps to stress-free AI access'
+      subtitle: 'Three simple steps to stress-free AI access',
+      steps: {
+        s1: { title: 'Create Account', desc: 'Quick sign-up, no complex setup required' },
+        s2: { title: 'Get API Key', desc: 'Receive one key to access all supported AI models' },
+        s3: { title: 'Start Building', desc: 'Instantly call Claude, GPT, Gemini with a single API key' }
+      }
     },
     features: {
       unifiedGateway: 'One-Click Access',

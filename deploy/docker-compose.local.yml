@@ -24,7 +24,12 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: weishaw/sub2api:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        - GOLANG_IMAGE=golang:1.26.1-alpine
+        - NODE_IMAGE=node:24-alpine
     container_name: sub2api
     restart: unless-stopped
     ulimits:

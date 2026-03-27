@@ -6,12 +6,10 @@ import i18n, { initI18n } from './i18n'
 import { useAppStore } from '@/stores/app'
 import './style.css'
 
+/** 平台统一默认深色；Teleport 到 body 的模态也依赖 documentElement 上的 .dark */
 function initThemeClass() {
-  const savedTheme = localStorage.getItem('theme')
-  const shouldUseDark =
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  document.documentElement.classList.toggle('dark', shouldUseDark)
+  document.documentElement.classList.add('dark')
+  localStorage.setItem('theme', 'dark')
 }
 
 async function bootstrap() {

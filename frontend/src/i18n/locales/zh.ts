@@ -14,7 +14,7 @@ export default {
     heroSubtitle: '一个密钥，畅用多个 AI 模型',
     heroDescription: '无需管理多个订阅账号，一站式接入 Claude、GPT、Gemini 等主流 AI 服务',
     tags: {
-      subscriptionToApi: '订阅转 API',
+      subscriptionToApi: '无损透传',
       stickySession: '会话保持',
       realtimeBilling: '按量计费'
     },
@@ -43,7 +43,12 @@ export default {
     // 解决方案区块
     solutions: {
       title: '我们帮你解决',
-      subtitle: '简单三步，开始省心使用 AI'
+      subtitle: '简单三步，开始省心使用 AI',
+      steps: {
+        s1: { title: '注册账号', desc: '一键注册，无需复杂配置，即开即用' },
+        s2: { title: '获取密钥', desc: '获得一个 API 密钥，连接所有支持的 AI 模型' },
+        s3: { title: '开始使用', desc: '立即调用 Claude、GPT、Gemini，享受流畅 AI 体验' }
+      }
     },
     features: {
       unifiedGateway: '一键接入',
@@ -4357,7 +4362,7 @@ export default {
         siteNamePlaceholder: 'Sub2API',
         siteSubtitle: '站点副标题',
         siteSubtitleHint: '显示在登录和注册页面',
-        siteSubtitlePlaceholder: '订阅转 API 转换平台',
+        siteSubtitlePlaceholder: '无损透传 AI API 网关',
         apiBaseUrl: 'API 端点地址',
         apiBaseUrlHint: '用于"使用密钥"和"导入到 CC Switch"功能，留空则使用当前站点地址',
         apiBaseUrlPlaceholder: 'https://api.example.com',

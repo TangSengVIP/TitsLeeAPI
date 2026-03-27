@@ -198,7 +198,11 @@
 
   /* ============ 玻璃效果 ============ */
   .glass {
-    @apply bg-white/80 backdrop-blur-xl dark:bg-dark-800/80;
+    @apply bg-white/80 backdrop-blur-xl dark:backdrop-blur-xl;
+    background-color: rgba(255, 255, 255, 0.8);
+  }
+  .dark .glass {
+    background-color: rgba(10, 10, 15, 0.85);
   }
 
   .glass-card {
@@ -212,16 +216,17 @@
 
   /* ============ 卡片样式 ============ */
   .card {
-    @apply bg-white dark:bg-dark-800/50;
+    @apply bg-white dark:bg-white/[0.045];
     @apply rounded-2xl;
-    @apply border border-gray-100 dark:border-dark-700/50;
-    @apply shadow-card;
+    @apply border border-gray-100 dark:border-white/[0.09];
+    @apply shadow-card dark:shadow-none;
+    @apply backdrop-blur-sm dark:backdrop-blur-md;
     @apply transition-all duration-300;
   }
 
   .card-hover {
     @apply hover:-translate-y-0.5 hover:shadow-card-hover;
-    @apply hover:border-gray-200 dark:hover:border-dark-600;
+    @apply hover:border-gray-200 dark:hover:border-white/15;
   }
 
   .card-glass {
@@ -522,19 +527,24 @@
     @apply border-l-primary-500;
   }
 
-  /* ============ 侧边栏 ============ */
+  /* ============ 侧边栏（与 AppLayout #0a0a0f 统一，依赖父级 .dark） ============ */
   .sidebar {
     @apply fixed inset-y-0 left-0 z-40;
-    @apply w-64 bg-white dark:bg-dark-900;
-    @apply border-r border-gray-200 dark:border-dark-800;
-    @apply flex flex-col;
+    @apply w-64 flex flex-col;
     @apply transition-transform duration-300;
+    @apply bg-white dark:backdrop-blur-xl;
+    @apply border-r border-gray-200 dark:border-white/[0.08];
+    /* 透明白底 + #0c0c14 深度，不使用 @apply 的 /96 尾缀 */
+    background-color: rgba(255, 255, 255, 1);
+  }
+  .dark .sidebar {
+    background-color: rgba(12, 12, 20, 0.96);
   }
 
   .sidebar-header {
     @apply h-16 px-6;
     @apply flex items-center gap-3;
-    @apply border-b border-gray-100 dark:border-dark-800;
+    @apply border-b border-gray-100 dark:border-white/[0.06];
   }
 
   .sidebar-nav {
@@ -551,9 +561,18 @@
   }
 
   .sidebar-link-active {
-    @apply bg-primary-50 dark:bg-primary-900/20;
-    @apply text-primary-600 dark:text-primary-400;
-    @apply hover:bg-primary-100 dark:hover:bg-primary-900/30;
+    @apply bg-primary-50 text-primary-600;
+    @apply hover:bg-primary-100;
+    --sb-active-bg: rgba(20, 184, 166, 0.14);
+    --sb-active-hover: rgba(20, 184, 166, 0.20);
+    --sb-active-text: #5eead4;
+  }
+  .dark .sidebar-link-active {
+    background-color: var(--sb-active-bg);
+    color: var(--sb-active-text);
+  }
+  .dark .sidebar-link-active:hover {
+    background-color: var(--sb-active-hover);
   }
 
   .sidebar-section {
@@ -734,7 +753,11 @@
 
   /* 玻璃效果 */
   .glass {
-    @apply bg-white/80 backdrop-blur-xl dark:bg-dark-800/80;
+    @apply bg-white/80 backdrop-blur-xl dark:backdrop-blur-xl;
+    background-color: rgba(255, 255, 255, 0.8);
+  }
+  .dark .glass {
+    background-color: rgba(10, 10, 15, 0.85);
   }
 
   /* 隐藏滚动条 */
@@ -754,4 +777,308 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+
+  /* ============ 3D 文字效果 ============ */
+  /* 基础 3D 文字：多层阴影产生立体感 */
+  .text-3d {
+    text-shadow:
+      1px 1px 0 rgba(0, 0, 0, 0.4),
+      2px 2px 0 rgba(0, 0, 0, 0.3),
+      3px 3px 0 rgba(0, 0, 0, 0.2),
+      4px 4px 8px rgba(20, 184, 166, 0.15),
+      0 0 20px rgba(20, 184, 166, 0.1);
+  }
+
+  /* 悬停 3D 文字动画：文字浮起 + 发光 */
+  .text-3d-hover {
+    text-shadow:
+      1px 1px 0 rgba(0, 0, 0, 0.4),
+      2px 2px 0 rgba(0, 0, 0, 0.3),
+      3px 3px 0 rgba(0, 0, 0, 0.2),
+      4px 4px 8px rgba(20, 184, 166, 0.15);
+    transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .text-3d-hover:hover {
+    text-shadow:
+      1px 1px 0 rgba(0, 0, 0, 0.5),
+      2px 2px 0 rgba(0, 0, 0, 0.4),
+      3px 3px 0 rgba(0, 0, 0, 0.3),
+      4px 4px 0 rgba(0, 0, 0, 0.2),
+      0 0 15px rgba(20, 184, 166, 0.3),
+      0 0 30px rgba(20, 184, 166, 0.2),
+      0 0 45px rgba(20, 184, 166, 0.1);
+    transform: translateY(-2px) scale(1.02);
+    color: #5eead4;
+  }
+
+  /* 青色霓虹 3D 文字 */
+  .text-3d-cyan {
+    color: #5eead4;
+    text-shadow:
+      0 0 5px rgba(94, 234, 212, 0.8),
+      0 0 10px rgba(94, 234, 212, 0.5),
+      0 0 20px rgba(94, 234, 212, 0.3),
+      1px 1px 0 rgba(0, 0, 0, 0.6),
+      2px 2px 0 rgba(0, 0, 0, 0.4),
+      3px 3px 0 rgba(0, 0, 0, 0.3),
+      4px 4px 12px rgba(20, 184, 166, 0.4);
+    transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .text-3d-cyan:hover {
+    color: #99f6e4;
+    text-shadow:
+      0 0 8px rgba(153, 246, 228, 0.9),
+      0 0 15px rgba(153, 246, 228, 0.6),
+      0 0 30px rgba(94, 234, 212, 0.4),
+      0 0 50px rgba(94, 234, 212, 0.2),
+      1px 1px 0 rgba(0, 0, 0, 0.5),
+      2px 2px 0 rgba(0, 0, 0, 0.4),
+      3px 3px 0 rgba(0, 0, 0, 0.3),
+      4px 4px 0 rgba(0, 0, 0, 0.2),
+      6px 6px 20px rgba(20, 184, 166, 0.5);
+    transform: translateY(-3px) scale(1.03);
+  }
+
+  /* 渐变 3D 文字 */
+  .text-3d-gradient {
+    background: linear-gradient(135deg, #5eead4 0%, #14b8a6 40%, #0d9488 60%, #5eead4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 8px rgba(20, 184, 166, 0.3)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .text-3d-gradient:hover {
+    background: linear-gradient(135deg, #99f6e4 0%, #5eead4 40%, #14b8a6 60%, #2dd4bf 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    filter: drop-shadow(0 0 15px rgba(20, 184, 166, 0.6)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+    transform: translateY(-2px) scale(1.02);
+  }
+
+  /* 金属银灰 3D 文字 */
+  .text-3d-metal {
+    color: #e2e8f0;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.1),
+      1px 1px 0 rgba(0, 0, 0, 0.6),
+      2px 2px 0 rgba(0, 0, 0, 0.5),
+      3px 3px 0 rgba(0, 0, 0, 0.4),
+      4px 4px 12px rgba(0, 0, 0, 0.4);
+    transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .text-3d-metal:hover {
+    color: #f8fafc;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.2),
+      1px 1px 0 rgba(0, 0, 0, 0.6),
+      2px 2px 0 rgba(0, 0, 0, 0.5),
+      3px 3px 0 rgba(0, 0, 0, 0.4),
+      4px 4px 0 rgba(0, 0, 0, 0.3),
+      0 0 20px rgba(94, 234, 212, 0.2),
+      0 0 40px rgba(20, 184, 166, 0.1);
+    transform: translateY(-2px) scale(1.02);
+  }
+
+  /* ============ 全局文字悬停动画 ============ */
+  /* 所有文字悬停时轻微浮起发光 */
+  .hover-lift {
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    text-shadow: 0 0 12px rgba(20, 184, 166, 0.25), 0 4px 8px rgba(0, 0, 0, 0.3);
+    color: #5eead4;
+  }
+
+  /* 卡片内文字悬停上浮 */
+  .card-text-hover > * {
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .card-text-hover > *:hover {
+    transform: translateY(-2px);
+    text-shadow: 0 0 15px rgba(20, 184, 166, 0.3), 0 4px 10px rgba(0, 0, 0, 0.4);
+    color: #5eead4;
+  }
+
+  /* 段落文字悬停淡入上浮 */
+  .text-animate {
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+    display: inline-block;
+  }
+
+  .text-animate::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #14b8a6, #5eead4);
+    transition: width 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    border-radius: 1px;
+  }
+
+  .text-animate:hover {
+    transform: translateY(-1px);
+    text-shadow: 0 0 10px rgba(20, 184, 166, 0.25), 0 2px 6px rgba(0, 0, 0, 0.3);
+    color: #5eead4;
+  }
+
+  .text-animate:hover::after {
+    width: 100%;
+  }
+
+  /* 数字/大标题悬浮脉冲效果 */
+  .text-pulse-hover {
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .text-pulse-hover:hover {
+    transform: scale(1.05);
+    text-shadow:
+      0 0 10px rgba(20, 184, 166, 0.4),
+      0 0 20px rgba(20, 184, 166, 0.25),
+      0 4px 12px rgba(0, 0, 0, 0.4);
+    color: #5eead4;
+  }
+
+  /* 按钮内文字动画 */
+  .btn .text-animate,
+  .btn-text {
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .btn:hover .btn-text {
+    transform: translateY(-1px);
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+  }
+
+  /* 列表项文字逐个入场动画 */
+  @keyframes textReveal {
+    0% {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+      filter: blur(2px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+
+  .text-reveal {
+    animation: textReveal 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+
+  /* 表格行悬停文字发光 */
+  .table tbody tr {
+    transition: all 0.2s ease;
+  }
+
+  .table tbody tr:hover td {
+    color: #5eead4;
+    text-shadow: 0 0 8px rgba(20, 184, 166, 0.2);
+  }
+
+  /* 侧边栏链接文字动画 */
+  .sidebar-link {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sidebar-link::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 0;
+    height: 0;
+    background: linear-gradient(90deg, rgba(20, 184, 166, 0.15), transparent);
+    border-radius: 0 4px 4px 0;
+    transform: translateY(-50%);
+    transition: all 0.3s ease;
+  }
+
+  .sidebar-link:hover::before {
+    width: 100%;
+    height: 60%;
+  }
+
+  .sidebar-link:hover {
+    text-shadow: 0 0 10px rgba(20, 184, 166, 0.3);
+    color: #5eead4 !important;
+  }
+
+  /* 标签页文字动画 */
+  .tab {
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .tab:hover {
+    text-shadow: 0 0 12px rgba(20, 184, 166, 0.3);
+    color: #5eead4;
+    transform: translateY(-1px);
+  }
+
+  /* 下拉菜单项文字动画 */
+  .dropdown-item {
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  .dropdown-item:hover {
+    text-shadow: 0 0 8px rgba(20, 184, 166, 0.3);
+    color: #5eead4;
+    padding-left: 1.1rem;
+  }
+
+  /* 导航链接发光动画 */
+  .nav-link {
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+  }
+
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #5eead4, transparent);
+    transform: translateX(-50%);
+    transition: width 0.3s ease;
+  }
+
+  .nav-link:hover {
+    text-shadow: 0 0 15px rgba(20, 184, 166, 0.5), 0 0 30px rgba(20, 184, 166, 0.2);
+    color: #5eead4;
+    transform: translateY(-1px);
+  }
+
+  .nav-link:hover::after {
+    width: 100%;
+  }
+
 }

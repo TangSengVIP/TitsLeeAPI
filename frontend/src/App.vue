@@ -20,24 +20,31 @@ const announcementStore = useAnnouncementStore()
  * @param logoUrl - URL of the logo to use as favicon
  */
 function updateFavicon(logoUrl: string) {
-  // Find existing favicon link or create new one
-  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  const url = logoUrl || '/favicon-32.png'
+  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"][sizes="32x32"]')
+  if (!link) {
+    link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  }
   if (!link) {
     link = document.createElement('link')
     link.rel = 'icon'
     document.head.appendChild(link)
   }
-  link.type = logoUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/x-icon'
-  link.href = logoUrl
+  if (url.endsWith('.svg')) {
+    link.type = 'image/svg+xml'
+  } else if (url.endsWith('.png')) {
+    link.type = 'image/png'
+  } else {
+    link.type = 'image/x-icon'
+  }
+  link.href = url
 }
 
 // Watch for site settings changes and update favicon/title
 watch(
   () => appStore.siteLogo,
   (newLogo) => {
-    if (newLogo) {
-      updateFavicon(newLogo)
-    }
+    updateFavicon(newLogo || '/favicon-32.png')
   },
   { immediate: true }
 )

@@ -17,7 +17,7 @@ export function buildEmbeddedUrl(
   baseUrl: string,
   userId?: number,
   authToken?: string | null,
-  theme: 'light' | 'dark' = 'light',
+  theme: 'light' | 'dark' = 'dark',
   lang?: string,
 ): string {
   if (!baseUrl) return baseUrl
@@ -46,6 +46,6 @@ export function buildEmbeddedUrl(
 }
 
 export function detectTheme(): 'light' | 'dark' {
-  if (typeof document === 'undefined') return 'light'
+  if (typeof document === 'undefined') return 'dark'
   return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
 }
